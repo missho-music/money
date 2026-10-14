@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+    function userData() {
+      return get(userPath()).data;
+    }
+    function isTeacher() {
+      return signedIn() && userData().role == "teacher";
+    }
+    function isStudent() {
+      return signedIn() && userData().role == "student";
+    }
+    function owns(studentId) {
+      return isStudent() && userData().linkedStudentId == studentId;
+    }
+    function teacherSeesClass(classId) {
+      return isTeacher() && (
+        userData().authorizedClassIds.size() == 0 ||
+        classId in userData().authorizedClassIds
+      );
+    }
+
+    // Profiles are readable by the owner and teachers. Passwords are not stored here
+    // when Firebase Auth is enabled. All writes go through the trusted server.
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isTeacher());
+      allow write: if false;
+    }
+
+    match /loginIndex/{id} {
+      allow read, write: if false;
+    }
+    match /seats/{id} {
+      allow read, write: if false;
+    }
+    match /idempotency/{id} {
+      allow read, write: if false;
+    }
+    match /settings/{id} {
+      allow read: if isTeacher();
+      allow write: if false;
+    }
+
+    match /classes/{classId} {
+      allow read: if teacherSeesClass(classId) || (isStudent() && resource.data.classId == null);
+      allow write: if false;
+    }
+    match /students/{studentId} {
+      allow read: if owns(studentId) || teacherSeesClass(resource.data.classId);
+      allow write: if false;
+    }
+    match /wallets/{studentId} {
+      allow read: if owns(studentId) || isTeacher();
+      allow write: if false;
+    }
+    match /pointTransactions/{transactionId} {
+      allow read: if isTeacher() || (isStudent() && resource.data.studentId == userData().linkedStudentId);
+      allow write: if false;
+    }
+    match /drawSessions/{sessionId} {
+      allow read: if isTeacher();
+      allow write: if false;
+    }
+    match /drawHistory/{drawId} {
+      allow read: if isTeacher() || (isStudent() && resource.data.studentId == userData().linkedStudentId);
+      allow write: if false;
+    }
+    match /absences/{id} {
+      allow read: if isTeacher();
+      allow write: if false;
+    }
+    match /pets/{petId} {
+      allow read: if isTeacher() || (isStudent() && resource.data.studentId == userData().linkedStudentId);
+      allow write: if false;
+    }
+    match /items/{itemId} {
+      allow read: if isTeacher() || (isStudent() && resource.data.isActive == true);
+      allow write: if false;
+    }
+    match /rewards/{rewardId} {
+      allow read: if isTeacher() || (isStudent() && resource.data.isActive == true);
+      allow write: if false;
+    }
+    match /inventories/{inventoryId} {
+      allow read: if isTeacher() || (isStudent() && resource.data.studentId == userData().linkedStudentId);
+      allow write: if false;
+    }
+    match /orders/{orderId} {
+      allow read: if isTeacher() || (isStudent() && resource.data.studentId == userData().linkedStudentId);
+      allow write: if false;
+    }
+  }
+}
